@@ -1,1 +1,462 @@
 
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clean Catharsis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      background-color: #09090b;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #fafafa;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .font-mono-code {
+      font-family: 'Geist Mono', monospace;
+    }
+
+    /* Clean Paper Sheet */
+    .sheet-paper {
+      background: #f7f7f5;
+      color: #121212;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    /* Canvas overlay */
+    #drawCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      touch-action: none;
+    }
+    #drawCanvas.draw-enabled {
+      cursor: crosshair;
+      pointer-events: auto;
+    }
+    #drawCanvas.draw-disabled {
+      cursor: text;
+      pointer-events: none;
+    }
+
+    /* Clean Brutalist Flash Bump */
+    @keyframes screenFlashBump {
+      0% { transform: scale(1) translate(0, 0); filter: invert(0); }
+      15% { transform: scale(1.02) translate(-3px, 4px); filter: invert(0.9); }
+      35% { transform: scale(0.98) translate(3px, -3px); filter: invert(0.3); }
+      60% { transform: scale(1.01) translate(-2px, -2px); filter: invert(0); }
+      100% { transform: scale(1) translate(0, 0); filter: invert(0); }
+    }
+    .flash-bump-active {
+      animation: screenFlashBump 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) forwards !important;
+    }
+
+    /* Sharp Paper Slice & Drop */
+    .tear-left {
+      clip-path: polygon(0 0, 50% 0, 48% 28%, 52% 52%, 49% 78%, 50% 100%, 0 100%) !important;
+      animation: dropLeft 0.5s cubic-bezier(0.32, 0, 0.67, 0) forwards !important;
+    }
+    .tear-right {
+      clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%, 49% 78%, 52% 52%, 48% 28%) !important;
+      animation: dropRight 0.5s cubic-bezier(0.32, 0, 0.67, 0) forwards !important;
+    }
+    @keyframes dropLeft {
+      0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+      100% { transform: translate(-45px, 260px) rotate(-8deg); opacity: 0; }
+    }
+    @keyframes dropRight {
+      0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+      100% { transform: translate(45px, 260px) rotate(8deg); opacity: 0; }
+    }
+
+    /* Dissolve / Burnout */
+    @keyframes instantDissolve {
+      0% { opacity: 1; transform: scale(1); filter: blur(0px); }
+      60% { opacity: 0.6; transform: scale(0.97); filter: blur(3px) contrast(150%); }
+      100% { opacity: 0; transform: scale(0.92); filter: blur(8px); }
+    }
+    .dissolve-active {
+      animation: instantDissolve 0.3s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+    }
+  </style>
+</head>
+<body id="appBody" class="flex flex-col justify-between items-center min-h-screen px-4 py-6 sm:py-10 select-none">
+
+  <!-- Minimal Header -->
+  <header class="w-full max-w-2xl flex items-center justify-between border-b border-zinc-800/80 pb-4">
+    <div class="flex items-center gap-3">
+      <div class="w-2.5 h-2.5 bg-zinc-100 rounded-full"></div>
+      <span class="font-mono-code text-xs uppercase tracking-wider text-zinc-400">Purge Memory &bull; 0 Logs</span>
+    </div>
+    <button id="audioToggle" class="font-mono-code text-xs text-zinc-400 hover:text-zinc-100 transition px-2.5 py-1 border border-zinc-800 hover:border-zinc-700 rounded cursor-pointer">
+      Audio: <span id="audioState">ON</span>
+    </button>
+  </header>
+
+  <!-- Main Interaction Area -->
+  <main class="w-full max-w-2xl my-auto py-6">
+    
+    <!-- Paper Sheet Wrapper -->
+    <div id="paperBlock" class="relative transition-all duration-300">
+      
+      <div id="noteCard" class="sheet-paper rounded-lg relative overflow-hidden transition-all border border-zinc-300">
+        
+        <!-- Canvas for Scribbles -->
+        <canvas id="drawCanvas" class="draw-disabled"></canvas>
+
+        <!-- Sheet Top Minimal Bar -->
+        <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 text-xs font-mono-code text-zinc-500">
+          <div class="flex items-center gap-2">
+            <span id="modeStatusIndicator" class="w-2 h-2 rounded-full bg-zinc-400"></span>
+            <span id="modeStatusText">MODE: KETIK</span>
+          </div>
+          <button id="clearScratchBtn" class="text-zinc-500 hover:text-black uppercase text-[11px] font-medium transition cursor-pointer">
+            Hapus Coretan
+          </button>
+        </div>
+
+        <!-- Clean Distraction-Free Textarea -->
+        <div class="p-6 sm:p-8 min-h-[320px] flex flex-col">
+          <textarea
+            id="textInput"
+            rows="8"
+            placeholder="Ketik apa saja yang mengganjal tanpa filter..."
+            class="w-full bg-transparent resize-none outline-none font-mono-code text-base sm:text-lg text-zinc-900 placeholder:text-zinc-400 leading-relaxed flex-1"
+          ></textarea>
+        </div>
+
+        <!-- Controls Row -->
+        <div class="relative z-30 px-5 py-4 border-t border-zinc-200 bg-zinc-100/70 flex flex-wrap items-center justify-between gap-3">
+          
+          <!-- Mode Toggle -->
+          <div class="flex items-center gap-2">
+            <button
+              id="scribbleToggleBtn"
+              type="button"
+              class="font-mono-code text-xs px-3.5 py-2 rounded border border-zinc-400/80 bg-white hover:bg-zinc-200 text-zinc-900 transition font-medium flex items-center gap-2 cursor-pointer"
+            >
+              <span class="w-2 h-2 rounded-full border border-black bg-transparent" id="scribbleDot"></span>
+              <span id="scribbleBtnText">Coret-Coret: OFF</span>
+            </button>
+          </div>
+
+          <!-- Purge Triggers -->
+          <div class="flex items-center gap-2.5">
+            <button
+              id="ripBtn"
+              type="button"
+              class="font-mono-code text-xs px-4 py-2 rounded border border-zinc-400 bg-white hover:bg-zinc-200 text-zinc-900 transition font-medium cursor-pointer"
+            >
+              Robek
+            </button>
+
+            <button
+              id="bumpBtn"
+              type="button"
+              class="font-mono-code text-xs px-5 py-2 rounded bg-black hover:bg-zinc-800 active:scale-95 text-white transition font-semibold cursor-pointer tracking-wider uppercase"
+            >
+              Hancurkan / Bump
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Stark Silent Aftermath State -->
+    <div id="silenceCard" class="hidden text-center py-16 px-4">
+      <p class="font-mono-code text-lg sm:text-xl text-zinc-400 mb-8 tracking-wide">
+        Hilang. Hening.
+      </p>
+      <button
+        id="resetBtn"
+        type="button"
+        class="font-mono-code text-xs px-5 py-2.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition cursor-pointer"
+      >
+        Tulis Baru
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Clean Minimalist Footer -->
+  <footer class="w-full max-w-2xl flex items-center justify-between border-t border-zinc-800/80 pt-4 font-mono-code text-[11px] text-zinc-500">
+    <span>Lokal di peramban. Tidak ada yang disimpan.</span>
+    <span class="text-zinc-600">Pure Catharsis</span>
+  </footer>
+
+  <script>
+    /* -------------------------------------------------------------
+       AUDIO ENGINE (Minimalist dry tones, no cheesy sound effects)
+    ------------------------------------------------------------- */
+    let audioCtx = null;
+    let audioEnabled = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playTone(type) {
+      if (!audioEnabled) return;
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+
+        if (type === 'scratch') {
+          // Dry pencil friction
+          const bufferSize = audioCtx.sampleRate * 0.04;
+          const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+          const out = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) out[i] = (Math.random() * 2 - 1) * 0.2;
+
+          const src = audioCtx.createBufferSource();
+          src.buffer = noiseBuffer;
+          const filter = audioCtx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(3200, now);
+          filter.Q.value = 3;
+
+          const gain = audioCtx.createGain();
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+          src.connect(filter);
+          filter.connect(gain);
+          gain.connect(audioCtx.destination);
+          src.start(now);
+
+        } else if (type === 'tear') {
+          // Clean, crisp paper slice
+          const bufferSize = audioCtx.sampleRate * 0.16;
+          const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+          const out = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) out[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+
+          const src = audioCtx.createBufferSource();
+          src.buffer = noiseBuffer;
+          const filter = audioCtx.createBiquadFilter();
+          filter.type = 'highpass';
+          filter.frequency.setValueAtTime(1400, now);
+
+          const gain = audioCtx.createGain();
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+          src.connect(filter);
+          filter.connect(gain);
+          gain.connect(audioCtx.destination);
+          src.start(now);
+
+        } else if (type === 'bump') {
+          // Deep punch sub-bass drop
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(110, now);
+          osc.frequency.exponentialRampToValueAtTime(32, now + 0.22);
+          gain.gain.setValueAtTime(0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.23);
+        }
+      } catch (e) {
+        // Audio error fallback
+      }
+    }
+
+    // Audio toggle
+    const audioToggle = document.getElementById('audioToggle');
+    const audioState = document.getElementById('audioState');
+    audioToggle.addEventListener('click', () => {
+      audioEnabled = !audioEnabled;
+      audioState.textContent = audioEnabled ? 'ON' : 'OFF';
+      audioState.classList.toggle('text-zinc-600', !audioEnabled);
+    });
+
+    /* -------------------------------------------------------------
+       SCRIBBLE CANVAS (Raw pen / scratch overlay)
+    ------------------------------------------------------------- */
+    const drawCanvas = document.getElementById('drawCanvas');
+    const drawCtx = drawCanvas.getContext('2d');
+    const scribbleToggleBtn = document.getElementById('scribbleToggleBtn');
+    const scribbleBtnText = document.getElementById('scribbleBtnText');
+    const scribbleDot = document.getElementById('scribbleDot');
+    const modeStatusText = document.getElementById('modeStatusText');
+    const modeStatusIndicator = document.getElementById('modeStatusIndicator');
+    const clearScratchBtn = document.getElementById('clearScratchBtn');
+    const textInput = document.getElementById('textInput');
+
+    let drawModeActive = false;
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+    let strokeCount = 0;
+
+    function resizeCanvas() {
+      const rect = drawCanvas.getBoundingClientRect();
+      drawCanvas.width = rect.width;
+      drawCanvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', resizeCanvas);
+
+    scribbleToggleBtn.addEventListener('click', () => {
+      drawModeActive = !drawModeActive;
+      if (drawModeActive) {
+        drawCanvas.classList.remove('draw-disabled');
+        drawCanvas.classList.add('draw-enabled');
+        scribbleBtnText.textContent = 'Coret-Coret: ON';
+        scribbleDot.classList.add('bg-black');
+        modeStatusText.textContent = 'MODE: CORET/SILANG';
+        modeStatusIndicator.classList.remove('bg-zinc-400');
+        modeStatusIndicator.classList.add('bg-black');
+      } else {
+        drawCanvas.classList.remove('draw-enabled');
+        drawCanvas.classList.add('draw-disabled');
+        scribbleBtnText.textContent = 'Coret-Coret: OFF';
+        scribbleDot.classList.remove('bg-black');
+        modeStatusText.textContent = 'MODE: KETIK';
+        modeStatusIndicator.classList.remove('bg-black');
+        modeStatusIndicator.classList.add('bg-zinc-400');
+      }
+    });
+
+    function getPos(e) {
+      const rect = drawCanvas.getBoundingClientRect();
+      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+      const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+      return { x, y };
+    }
+
+    function startDraw(e) {
+      if (!drawModeActive) return;
+      isDrawing = true;
+      const pos = getPos(e);
+      lastX = pos.x;
+      lastY = pos.y;
+    }
+
+    function stroke(e) {
+      if (!isDrawing || !drawModeActive) return;
+      const pos = getPos(e);
+
+      drawCtx.beginPath();
+      drawCtx.moveTo(lastX, lastY);
+      drawCtx.lineTo(pos.x, pos.y);
+      drawCtx.strokeStyle = '#18181b';
+      drawCtx.lineWidth = 3;
+      drawCtx.lineCap = 'round';
+      drawCtx.lineJoin = 'round';
+      drawCtx.stroke();
+
+      lastX = pos.x;
+      lastY = pos.y;
+      strokeCount++;
+      if (strokeCount % 7 === 0) playTone('scratch');
+    }
+
+    function stopDraw() {
+      isDrawing = false;
+    }
+
+    drawCanvas.addEventListener('mousedown', startDraw);
+    window.addEventListener('mouseup', stopDraw);
+    drawCanvas.addEventListener('mousemove', stroke);
+
+    drawCanvas.addEventListener('touchstart', (e) => {
+      if (drawModeActive) {
+        startDraw(e);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', stopDraw);
+    drawCanvas.addEventListener('touchmove', (e) => {
+      if (drawModeActive) {
+        stroke(e);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    clearScratchBtn.addEventListener('click', () => {
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      playTone('scratch');
+    });
+
+    /* -------------------------------------------------------------
+       PURGE & DESTROY LOGIC
+    ------------------------------------------------------------- */
+    const appBody = document.getElementById('appBody');
+    const paperBlock = document.getElementById('paperBlock');
+    const noteCard = document.getElementById('noteCard');
+    const ripBtn = document.getElementById('ripBtn');
+    const bumpBtn = document.getElementById('bumpBtn');
+    const silenceCard = document.getElementById('silenceCard');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function purgeContent() {
+      // Complete memory wipe
+      textInput.value = '';
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    }
+
+    // 1. Rip / Tear Action
+    ripBtn.addEventListener('click', () => {
+      playTone('tear');
+      noteCard.classList.add('tear-left');
+      
+      setTimeout(() => {
+        purgeContent();
+        paperBlock.classList.add('hidden');
+        noteCard.classList.remove('tear-left');
+        silenceCard.classList.remove('hidden');
+      }, 480);
+    });
+
+    // 2. Send Bump / Hard Flash Dissolve
+    bumpBtn.addEventListener('click', () => {
+      playTone('bump');
+      appBody.classList.add('flash-bump-active');
+      noteCard.classList.add('dissolve-active');
+
+      setTimeout(() => {
+        purgeContent();
+        appBody.classList.remove('flash-bump-active');
+        paperBlock.classList.add('hidden');
+        noteCard.classList.remove('dissolve-active');
+        silenceCard.classList.remove('hidden');
+      }, 300);
+    });
+
+    // Reset State
+    resetBtn.addEventListener('click', () => {
+      silenceCard.classList.add('hidden');
+      paperBlock.classList.remove('hidden');
+      resizeCanvas();
+      textInput.focus();
+    });
+  </script>
+</body>
+</html>
